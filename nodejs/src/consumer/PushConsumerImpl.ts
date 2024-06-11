@@ -3,12 +3,16 @@ import { Consumer, FilterExpression } from '../../dist';
 import { ConsumerOptions } from './Consumer';
 import { HeartbeatRequest, NotifyClientTerminationRequest } from '../../proto/apache/rocketmq/v2/service_pb';
 import { Settings } from '../client';
+import { PushSubscriptionSettings } from './PushSubscriptionSettings';
+import { Assignment } from '../../proto/apache/rocketmq/v2/definition_pb';
 
 export class PushConsumerImpl extends Consumer implements ConsumerOptions, PushConsumer {
 
-    #consumptionOkQuantity: 0;
-    #consumptionErrorQuantity: 0;
-
+    #consumptionOkQuantity: BigInt;
+    #consumptionErrorQuantity: BigInt;
+    #pushSubscriptionSettings: PushSubscriptionSettings;
+    #subscriptionExpressions = new Map<string, FilterExpression>();
+    #cacheAssignments = new Map<string, Assignment>();
 
     close(): void {
     }
