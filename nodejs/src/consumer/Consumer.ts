@@ -28,14 +28,15 @@ import { BaseClient, BaseClientOptions } from '../client';
 import { createDuration, createResource } from '../util';
 import { FilterExpression } from './FilterExpression';
 
-export interface ConsumerOptions extends BaseClientOptions {
-  consumerGroup: string;
-}
+// ConsumerOptions is not needed anymore as PushConsumer directly handles ClientConfiguration
+// export interface ConsumerOptions extends BaseClientOptions {
+//   consumerGroup: string;
+// }
 
 export abstract class Consumer extends BaseClient {
   protected readonly consumerGroup: string;
 
-  constructor(options: ConsumerOptions) {
+  constructor(options: { consumerGroup: string } & BaseClientOptions) {
     super(options);
     this.consumerGroup = options.consumerGroup;
   }

@@ -1,20 +1,3 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import { MessageQueue as MessageQueuePB } from '../../proto/apache/rocketmq/v2/definition_pb';
 import { Endpoints } from './Endpoints';
 import { MessageQueue } from './MessageQueue';
@@ -34,5 +17,46 @@ export class TopicRouteData {
       endpointsMap.set(mq.broker.endpoints.facade, mq.broker.endpoints);
     }
     return Array.from(endpointsMap.values());
+  }
+
+  pickEndpointsToQueryAssignments() {
+    // MASTER_BROKER_ID = 0 in Java client
+    const MASTER_BROKER_ID = 0;
+    
+    // Simple round-robin selection
+    const candidateBrokers: { [key: string]: { endpoints: Endpoints, index: number } } = {};
+    
+    for (let i = 0; i < this.messageQueues.length; i++) {
+      const mq = this.messageQueues[i];
+      const broker = mq.broker;
+      
+      // Check if it's a master broker
+      if (broker.id !== MASTER_BROKER_ID) {
+        continue;
+      }
+      
+      // Check if broker has readable permission (simplified check)
+      // In Permission enum: NONE=0, READ=1, WRITE=2, READ_WRITE=3
+      if (mq.permission === 0) { // NONE
+        continue;
+      }
+      
+      const endpointsFacade = broker.endpoints.facade;
+      if (!candidateBrokers[endpointsFacade]) {
+        candidateBrokers[endpointsFacade] = {
+          endpoints: broker.endpoints,
+          index: i
+        };
+      }
+    }
+    
+    const candidates = Object.values(candidateBrokers);
+    if (candidates.length === 0) {
+      throw new Error('Failed to pick endpoints to query assignment');
+    }
+    
+    // Pick one randomly
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex].endpoints;
   }
 }

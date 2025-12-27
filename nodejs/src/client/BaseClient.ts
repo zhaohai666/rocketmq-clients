@@ -47,6 +47,9 @@ import { ClientId } from './ClientId';
 
 const debug = debuglog('rocketmq-client-nodejs:client:BaseClient');
 
+// Client states
+type ClientState = 'CREATED' | 'STARTING' | 'RUNNING' | 'STOPPING' | 'TERMINATED' | 'FAILED';
+
 export interface BaseClientOptions {
   sslEnabled?: boolean;
   /**
@@ -76,6 +79,7 @@ export abstract class BaseClient {
   readonly clientId = ClientId.create();
   readonly clientType = ClientType.CLIENT_TYPE_UNSPECIFIED;
   readonly sslEnabled: boolean;
+  #state: ClientState = 'CREATED';
   readonly #sessionCredentials?: SessionCredentials;
   readonly namespace: string;
   protected readonly endpoints: Endpoints;
@@ -108,14 +112,31 @@ export abstract class BaseClient {
   }
 
   /**
+   * Get current client state
+   */
+  getState(): ClientState {
+    return this.#state;
+  }
+
+  /**
+   * Check if client is running
+   */
+  isRunning(): boolean {
+    return this.#state === 'RUNNING';
+  }
+
+  /**
    * Startup flow
    * https://github.com/apache/rocketmq-clients/blob/master/docs/workflow.md#startup
    */
   async startup() {
-    this.logger.info('Begin to startup the rocketmq client, clientId=%s', this.clientId);
     try {
+      this.#state = 'STARTING';
+      this.logger.info('Begin to startup the rocketmq client, clientId=%s', this.clientId);
       await this.#startup();
+      this.#state = 'RUNNING';
     } catch (e) {
+      this.#state = 'FAILED';
       const err = new Error(`Startup the rocketmq client failed, clientId=${this.clientId}, error=${e}`);
       this.logger.error(err);
       err.cause = e;
@@ -158,6 +179,7 @@ export abstract class BaseClient {
   }
 
   async shutdown() {
+    this.#state = 'STOPPING';
     this.logger.info('Begin to shutdown the rocketmq client, clientId=%s', this.clientId);
     while (this.#timers.length > 0) {
       const timer = this.#timers.pop();
@@ -171,6 +193,7 @@ export abstract class BaseClient {
     this.logger.info('Release all telemetry sessions successfully, clientId=%s', this.clientId);
 
     this.rpcClientManager.close();
+    this.#state = 'TERMINATED';
     this.logger.info('Shutdown the rocketmq client successfully, clientId=%s', this.clientId);
     this.logger.close && this.logger.close();
   }

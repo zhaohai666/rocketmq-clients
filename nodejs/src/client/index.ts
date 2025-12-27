@@ -17,6 +17,7 @@
 
 export * from './BaseClient';
 export * from './ClientId';
+export * from './ClientConfiguration';
 export * from './Logger';
 export * from './UserAgent';
 export * from './RpcClient';

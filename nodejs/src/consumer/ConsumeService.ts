@@ -15,12 +15,8 @@
  * limitations under the License.
  */
 
-export * from './Consumer';
-export * from './FilterExpression';
-export * from './SimpleConsumer';
-export * from './SimpleSubscriptionSettings';
-export * from './SubscriptionLoadBalancer';
-export * from './PushConsumer';
-export * from './PushConsumerBuilder';
-export * from './PushConsumerOptions';
-export * from './MessageListener';
+import { MessageView } from '../message';
+
+export interface ConsumeService {
+  consume(messageView: MessageView): Promise<void>;
+}

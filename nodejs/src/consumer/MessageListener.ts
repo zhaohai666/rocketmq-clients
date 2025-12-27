@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-export * from './Consumer';
-export * from './FilterExpression';
-export * from './SimpleConsumer';
-export * from './SimpleSubscriptionSettings';
-export * from './SubscriptionLoadBalancer';
-export * from './PushConsumer';
-export * from './PushConsumerBuilder';
-export * from './PushConsumerOptions';
-export * from './MessageListener';
+import { MessageView } from '../message';
+
+/**
+ * Message listener interface for processing received messages.
+ */
+export type MessageListener = (messageView: MessageView) => Promise<void>;

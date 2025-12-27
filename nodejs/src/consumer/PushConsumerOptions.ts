@@ -15,12 +15,16 @@
  * limitations under the License.
  */
 
-export * from './Consumer';
-export * from './FilterExpression';
-export * from './SimpleConsumer';
-export * from './SimpleSubscriptionSettings';
-export * from './SubscriptionLoadBalancer';
-export * from './PushConsumer';
-export * from './PushConsumerBuilder';
-export * from './PushConsumerOptions';
-export * from './MessageListener';
+import { ClientConfiguration } from '../client';
+import { FilterExpression } from './FilterExpression';
+import { MessageView } from '../message';
+
+export interface PushConsumerOptions {
+  clientConfiguration: ClientConfiguration;
+  consumerGroup: string;
+  subscriptionExpressions: Record<string, FilterExpression>;
+  messageListener: (messageView: MessageView) => Promise<void>;
+  maxCacheMessageCount?: number;
+  maxCacheMessageSizeInBytes?: number;
+  consumptionThreadCount?: number;
+}

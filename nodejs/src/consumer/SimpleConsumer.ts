@@ -23,9 +23,22 @@ import { createResource } from '../util';
 import { FilterExpression } from './FilterExpression';
 import { SimpleSubscriptionSettings } from './SimpleSubscriptionSettings';
 import { SubscriptionLoadBalancer } from './SubscriptionLoadBalancer';
-import { Consumer, ConsumerOptions } from './Consumer';
+import { Consumer } from './Consumer';
 
-export interface SimpleConsumerOptions extends ConsumerOptions {
+export interface SimpleConsumerOptions {
+  /**
+   * rocketmq cluster endpoints, e.g.:
+   * - 127.0.0.1:8081;127.0.0.1:8082
+   * - 127.0.0.1:8081
+   * - example.com
+   * - example.com:8443
+   */
+  endpoints: string;
+  namespace: string;
+  sessionCredentials?: any;
+  requestTimeout?: number;
+  sslEnabled?: boolean;
+  consumerGroup: string;
   /**
    * support tag string as filter, e.g.:
    * ```ts
@@ -39,6 +52,7 @@ export interface SimpleConsumerOptions extends ConsumerOptions {
    * set await duration for long-polling, default is 30000ms
    */
   awaitDuration?: number;
+  topics?: string[];
 }
 
 export class SimpleConsumer extends Consumer {
