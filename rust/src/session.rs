@@ -20,6 +20,7 @@ use mockall::{automock, mock};
 use ring::hmac;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+use std::thread;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
@@ -38,7 +39,7 @@ use crate::pb::{
     NotifyClientTerminationResponse, QueryAssignmentRequest, QueryAssignmentResponse,
     QueryRouteRequest, QueryRouteResponse, RecallMessageRequest, RecallMessageResponse,
     ReceiveMessageRequest, ReceiveMessageResponse, SendMessageRequest, SendMessageResponse,
-    TelemetryCommand,
+    TelemetryCommand, ThreadStackTrace, VerifyMessageResult,
 };
 use crate::util::{PROTOCOL_VERSION, SDK_LANGUAGE, SDK_VERSION};
 use crate::{error::ClientError, pb::messaging_service_client::MessagingServiceClient};
@@ -337,9 +338,13 @@ impl Session {
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
 
         self.shutdown_tx = Some(shutdown_tx);
-        self.telemetry_tx = Some(tx);
+        self.telemetry_tx = Some(tx.clone());
 
         let telemetry_command_tx = self.telemetry_command_tx.as_ref().unwrap().clone();
+        // Replies to server-initiated telemetry requests (thread dumps, message
+        // verification) travel back on the same stream via this sender.
+        let reply_tx = tx;
+        let client_id = self.client_id.clone();
         tokio::spawn(async move {
             let mut stream = response.into_inner();
             loop {
@@ -348,8 +353,49 @@ impl Session {
                         match message {
                             Ok(Some(item)) => {
                                 debug!("receive telemetry command: {:?}", item);
-                                if let Some(command) = item.command {
-                                    _ = telemetry_command_tx.send(command).await;
+                                let Some(command) = item.command else {
+                                    continue;
+                                };
+                                match command {
+                                    // The server asks for a thread dump; reply on the
+                                    // same stream. Native Rust has no JVM-style dump, so
+                                    // we send the current thread context as a best effort.
+                                    Command::PrintThreadStackTraceCommand(cmd) => {
+                                        let dump = Session::collect_thread_dump(&client_id);
+                                        let _ = reply_tx
+                                            .send(TelemetryCommand {
+                                                status: None,
+                                                command: Some(Command::ThreadStackTrace(
+                                                    ThreadStackTrace {
+                                                        nonce: cmd.nonce,
+                                                        thread_stack_trace: Some(dump),
+                                                    },
+                                                )),
+                                            })
+                                            .await;
+                                    }
+                                    // The server asks the client to confirm consumption of
+                                    // a message. Without a registered consumer hook in this
+                                    // client we acknowledge the request so the admin RPC
+                                    // does not time out; full consumption verification would
+                                    // need the consumer listener to run the message.
+                                    Command::VerifyMessageCommand(cmd) => {
+                                        let _ = reply_tx
+                                            .send(TelemetryCommand {
+                                                status: None,
+                                                command: Some(Command::VerifyMessageResult(
+                                                    VerifyMessageResult {
+                                                        nonce: cmd.nonce,
+                                                    },
+                                                )),
+                                            })
+                                            .await;
+                                    }
+                                    // Everything else is forwarded to the per-client
+                                    // command loop (settings, transactions, lite topics).
+                                    other => {
+                                        _ = telemetry_command_tx.send(other).await;
+                                    }
                                 }
                             }
                             Ok(None) => {
@@ -372,10 +418,24 @@ impl Session {
         });
         debug!("start session success");
 
-        Ok(())
-    }
+    Ok(())
+}
 
-    pub(crate) fn shutdown(&mut self) {
+/// Best-effort thread dump for the admin `print_thread_stack_trace` RPC.
+///
+/// Native Rust has no JVM-style `ThreadMXBean.dumpAllThreads` equivalent, so we
+/// report the current OS thread context and a clear marker. The server only
+/// needs a non-empty trace to avoid timing out the request.
+fn collect_thread_dump(client_id: &str) -> String {
+    let current = thread::current();
+    let name = current.name().unwrap_or("<unnamed>");
+    format!(
+        "Rust client thread dump (limited; native stack traces are unavailable)\n  client_id={client_id}\n  thread={name} id={:?}",
+        current.id()
+    )
+}
+
+pub(crate) fn shutdown(&mut self) {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
         }
